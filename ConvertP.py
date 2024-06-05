@@ -1,7 +1,9 @@
+import os
 import requests
 import re
 import html
 import subprocess
+from datetime import datetime
 
 def fetch_html(url):
     try:
@@ -20,14 +22,30 @@ def find_m3u8_links(html_content):
 def format_link(link):
     return html.unescape(link).replace('\\/', '/')
 
-def download_m3u8(url):
+def get_resolution_from_link(link):
+    resolutions = ['1080P', '720P', '480P', '240P']
+    for resolution in resolutions:
+        if resolution in link:
+            return resolution
+    return 'Unknown'
+
+def get_output_filename(resolution):
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    return f"{current_date}-{resolution}"
+
+def download_m3u8(url, output_dir):
+    resolution = get_resolution_from_link(url)
+    output_filename = get_output_filename(resolution)
     try:
-        subprocess.run(['yt-dlp', url], check=True)
+        subprocess.run(['yt-dlp', '-o', os.path.join(output_dir, f'{output_filename}.%(ext)s'), url], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error downloading the m3u8 link: {e}")
 
 def main():
     url = input("Enter the URL of the webpage: ")
+    output_dir = "Ph.Downloads"
+    os.makedirs(output_dir, exist_ok=True)
+    
     html_content = fetch_html(url)
     
     if html_content:
@@ -37,14 +55,15 @@ def main():
             print("Found .m3u8 links:")
             for idx, link in enumerate(m3u8_links, 1):
                 formatted_link = format_link(link)
-                print(f"{idx}: {formatted_link}")
+                resolution = get_resolution_from_link(formatted_link)
+                print(f"{idx}: {formatted_link} ({resolution})")
             
             choice = int(input(f"Enter the number of the link to download (1-{len(m3u8_links)}): "))
             
             if 1 <= choice <= len(m3u8_links):
                 selected_link = format_link(m3u8_links[choice - 1])
                 print(f"Downloading {selected_link}...")
-                download_m3u8(selected_link)
+                download_m3u8(selected_link, output_dir)
                 print("Download complete.")
             else:
                 print("Invalid choice.")
