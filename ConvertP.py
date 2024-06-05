@@ -4,6 +4,8 @@ import re
 import html
 import subprocess
 from datetime import datetime
+import random
+import string
 
 def fetch_html(url):
     try:
@@ -29,9 +31,14 @@ def get_resolution_from_link(link):
             return resolution
     return 'Unknown'
 
+def generate_random_string(length=8):
+    characters = string.ascii_uppercase + string.digits + "!@#$%^&*"
+    return ''.join(random.choice(characters) for _ in range(length))
+
 def get_output_filename(resolution):
     current_date = datetime.now().strftime("%Y-%m-%d")
-    return f"{current_date}-{resolution}"
+    random_string = generate_random_string()
+    return f"{current_date}-{resolution}-{random_string}"
 
 def download_m3u8(url, output_dir):
     resolution = get_resolution_from_link(url)
