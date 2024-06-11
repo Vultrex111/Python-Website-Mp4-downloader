@@ -3,9 +3,8 @@ import requests
 import re
 import html
 import subprocess
+import sys
 from datetime import datetime
-import random
-import string
 
 def fetch_html(url):
     try:
@@ -18,8 +17,7 @@ def fetch_html(url):
 
 def find_m3u8_links(html_content):
     m3u8_link_pattern = re.compile(r'https:\\/\\/[^"]+\.m3u8[^"]*')
-    m3u8_links = m3u8_link_pattern.findall(html_content)
-    return m3u8_links
+    return m3u8_link_pattern.findall(html_content)
 
 def format_link(link):
     return html.unescape(link).replace('\\/', '/')
@@ -31,53 +29,72 @@ def get_resolution_from_link(link):
             return resolution
     return 'Unknown'
 
-def generate_random_string(length=8):
-    characters = string.ascii_uppercase + string.digits + "!@#$%^&*"
-    return ''.join(random.choice(characters) for _ in range(length))
+def extract_title(html_content):
+    title_pattern = re.compile(r'<title>(.*?)<\/title>', re.IGNORECASE | re.DOTALL)
+    match = title_pattern.search(html_content)
+    if match:
+        return match.group(1).strip()
+    return 'Unknown_Title'
 
-def get_output_filename(resolution):
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    random_string = generate_random_string()
-    return f"{current_date}-{resolution}-{random_string}"
+def sanitize_filename(filename):
+    return re.sub(r'[\/:*?"<>|]', '-', filename)
 
-def download_m3u8(url, output_dir):
+def get_output_filename(title, resolution):
+    sanitized_title = sanitize_filename(title)
+    return f"{sanitized_title}-{resolution}"
+
+def download_m3u8(url, output_dir, title):
     resolution = get_resolution_from_link(url)
-    output_filename = get_output_filename(resolution)
+    output_filename = get_output_filename(title, resolution)
+    output_path = os.path.join(output_dir, f'{output_filename}.%(ext)s')
+    
     try:
-        subprocess.run(['yt-dlp', '-o', os.path.join(output_dir, f'{output_filename}.%(ext)s'), url], check=True)
+        subprocess.run(['yt-dlp', '-o', output_path, url], check=True)
+        print(f"Download complete: {output_path}")
     except subprocess.CalledProcessError as e:
         print(f"Error downloading the m3u8 link: {e}")
 
 def main():
-    url = input("Enter the URL of the webpage: ")
+    url = input("Enter the URL of the webpage: ").strip()
     output_dir = "Ph.Downloads"
+    
     os.makedirs(output_dir, exist_ok=True)
     
     html_content = fetch_html(url)
     
-    if html_content:
-        m3u8_links = find_m3u8_links(html_content)
-        
-        if m3u8_links:
-            print("Found .m3u8 links:")
-            for idx, link in enumerate(m3u8_links, 1):
-                formatted_link = format_link(link)
-                resolution = get_resolution_from_link(formatted_link)
-                print(f"{idx}: {formatted_link} ({resolution})")
-            
-            choice = int(input(f"Enter the number of the link to download (1-{len(m3u8_links)}): "))
-            
-            if 1 <= choice <= len(m3u8_links):
-                selected_link = format_link(m3u8_links[choice - 1])
-                print(f"Downloading {selected_link}...")
-                download_m3u8(selected_link, output_dir)
-                print("Download complete.")
-            else:
-                print("Invalid choice.")
-        else:
-            print("No .m3u8 links found.")
-    else:
+    if not html_content:
         print("Failed to fetch HTML content.")
+        return
+    
+    m3u8_links = find_m3u8_links(html_content)
+    
+    if not m3u8_links:
+        print("No .m3u8 links found.")
+        return
+    
+    title = extract_title(html_content)
+    
+    print("Found .m3u8 links:")
+    for idx, link in enumerate(m3u8_links, 1):
+        formatted_link = format_link(link)
+        resolution = get_resolution_from_link(formatted_link)
+        print(f"{idx}: {formatted_link} ({resolution})")
+    
+    try:
+        choice = int(input(f"Enter the number of the link to download (1-{len(m3u8_links)}): "))
+        if not 1 <= choice <= len(m3u8_links):
+            raise ValueError("Choice out of range.")
+    except ValueError as e:
+        print(f"Invalid input: {e}")
+        return
+    
+    selected_link = format_link(m3u8_links[choice - 1])
+    print(f"Downloading {selected_link}...")
+    download_m3u8(selected_link, output_dir, title)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nProcess interrupted by user. Exiting...")
+        sys.exit(0)
